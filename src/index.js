@@ -176,6 +176,7 @@ export default async ({ req, res, log, error }) => {
     return res.json({
       success: true,
       audioUrl: permanentAudioUrl,
+      fileName: fileName,
     });
 
   } catch (err) {
