@@ -4,6 +4,7 @@
   "type": "module",
   "main": "src/index.js",
   "dependencies": {
-    "replicate": "^0.30.2"
+    "replicate": "^0.30.2",
+    "node-appwrite": "^13.0.0"
   }
 }
