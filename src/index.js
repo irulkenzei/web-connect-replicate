@@ -160,7 +160,7 @@ export default async ({ req, res, log, error }) => {
     const storage = new Storage(client);
 
     const fileId = ID.unique();
-    const fileName = `generation-${fileId}.${output_format}`;
+    const fileName = `web-generation-${fileId}.${output_format}`;
 
     const uploadedFile = await storage.createFile(
       APPWRITE_AUDIO_BUCKET_ID,
