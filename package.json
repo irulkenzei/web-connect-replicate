@@ -4,6 +4,6 @@
   "type": "module",
   "main": "src/main.js",
   "dependencies": {
-    "replicate": "^0.30.0"
+    "replicate": "^0.30.2"
   }
 }
