@@ -72,6 +72,8 @@ export default async ({ req, res, log, error }) => {
       speed = 1.0,
       temperature = 0.65,
       output_format = 'wav',
+      background_music, // 🎵 opsional -- URL musik latar untuk auto-ducking
+      music_volume_db = -10.0,
     } = payload;
 
     requestId = reqId;
@@ -117,6 +119,14 @@ export default async ({ req, res, log, error }) => {
         temperature,
         output_format,
       };
+    }
+
+    // 🎵 Teruskan parameter background music ke Replicate KALAU diisi --
+    // sengaja ditulis di luar if/else mode di atas, biar berlaku sama untuk
+    // mode single MAUPUN dialogue tanpa duplikasi kode.
+    if (background_music) {
+      input.background_music = background_music;
+      input.music_volume_db = music_volume_db;
     }
 
     log('Starting Replicate prediction with mode: ' + mode);
