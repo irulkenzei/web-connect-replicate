@@ -74,6 +74,8 @@ export default async ({ req, res, log, error }) => {
       output_format = 'wav',
       background_music, // 🎵 opsional -- URL musik latar untuk auto-ducking
       music_volume_db = -10.0,
+      comma_pause_ms = 300, // ⏸️ opsional -- durasi jeda setelah koma
+      period_pause_ms = 600, // ⏸️ opsional -- durasi jeda setelah titik
     } = payload;
 
     requestId = reqId;
@@ -106,6 +108,8 @@ export default async ({ req, res, log, error }) => {
         speed,
         temperature,
         output_format,
+        comma_pause_ms,
+        period_pause_ms,
       };
     } else {
       if (!text || !speaker_wav) {
@@ -118,6 +122,8 @@ export default async ({ req, res, log, error }) => {
         speed,
         temperature,
         output_format,
+        comma_pause_ms,
+        period_pause_ms,
       };
     }
 
