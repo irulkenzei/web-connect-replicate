@@ -34,6 +34,15 @@ const MODEL_VERSION = process.env.REPLICATE_MODEL_VERSION;
 const APPWRITE_AUDIO_BUCKET_ID = process.env.APPWRITE_AUDIO_BUCKET_ID;
 const APPWRITE_DATABASE_ID = process.env.APPWRITE_DATABASE_ID; // 🆕 perlu ditambah
 const JOBS_COLLECTION_ID = 'web_generation_jobs'; // 🆕 collection baru
+// 🆕 URL publik Function replicate-webhook -- OPSIONAL. Kalau di-set,
+// function INI jadi SANGAT RINGAN (cuma mulai prediction lalu langsung
+// return, ~1 detik) -- Replicate yang notify balik ke replicate-webhook
+// begitu prediction selesai, TERMASUK proses download audio + upload ke
+// Storage (dipindah ke sana, lihat replicate-webhook/main.js). Kalau env
+// var ini BELUM di-set, function tetap jalan PERSIS seperti sebelumnya
+// (polling internal penuh + download/upload manual di sini) -- 100%
+// backward compatible, tidak ada resiko break kalau belum sempat setup.
+const REPLICATE_WEBHOOK_URL = process.env.REPLICATE_WEBHOOK_URL;
 
 const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
@@ -136,11 +145,31 @@ export default async ({ req, res, log, error }) => {
     }
 
     log('Starting Replicate prediction with mode: ' + mode);
-    let prediction = await replicate.predictions.create({
-      version: MODEL_VERSION,
-      input,
-    });
 
+    const createParams = { version: MODEL_VERSION, input };
+    if (REPLICATE_WEBHOOK_URL) {
+      createParams.webhook = `${REPLICATE_WEBHOOK_URL}?requestId=${encodeURIComponent(requestId)}&type=voice&format=${encodeURIComponent(output_format)}`;
+      createParams.webhook_events_filter = ['completed'];
+    }
+
+    let prediction = await replicate.predictions.create(createParams);
+
+    // 🆕 MODE WEBHOOK -- function ini SELESAI DI SINI. Polling, download
+    // audio, upload ke Storage, dan tulis job doc SEKARANG jadi tanggung
+    // jawab replicate-webhook, dipanggil Replicate begitu prediction
+    // selesai. Function ini gak perlu lagi "nyala" selama proses generate
+    // berlangsung (bisa menit-an) -- cuma nyala ~1 detik buat mulai aja.
+    if (REPLICATE_WEBHOOK_URL) {
+      log(`Prediction started (webhook mode): ${prediction.id}`);
+      return res.json({ success: true, predictionId: prediction.id, webhookMode: true });
+    }
+
+    // ============================================================
+    // FALLBACK -- webhook belum di-setup (REPLICATE_WEBHOOK_URL kosong).
+    // Perilaku LAMA: polling internal penuh sampai selesai, lalu
+    // download+upload manual di sini juga. Tidak ada yang berubah dari
+    // sebelumnya kalau kamu belum sempat setup replicate-webhook.
+    // ============================================================
     while (
       prediction.status !== 'succeeded' &&
       prediction.status !== 'failed' &&
