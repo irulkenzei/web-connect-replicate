@@ -175,8 +175,27 @@ export default async ({ req, res, log, error }) => {
     // jawab replicate-webhook, dipanggil Replicate begitu prediction
     // selesai. Function ini gak perlu lagi "nyala" selama proses generate
     // berlangsung (bisa menit-an) -- cuma nyala ~1 detik buat mulai aja.
+    // 🔧 FIX: mode webhook sebelumnya LANGSUNG return di sini tanpa
+    // pernah nulis document apapun ke database untuk requestId ini --
+    // akibatnya, pas replicate-webhook nanti nyoba UPDATE document itu
+    // (status completed/failed), dia gagal dengan error "Document with
+    // the requested ID could not be found", karena document-nya emang
+    // belum pernah dibikin sama sekali. Document awal (status
+    // "processing") WAJIB dibikin di sini dulu, biar ada yang bisa
+    // di-update sama webhook nanti.
     if (REPLICATE_WEBHOOK_URL) {
       log(`Prediction started (webhook mode): ${prediction.id}`);
+      await databases.createDocument(
+        APPWRITE_DATABASE_ID,
+        JOBS_COLLECTION_ID,
+        requestId,
+        {
+          status: 'processing',
+          audio_url: '',
+          file_name: '',
+          error_message: '',
+        }
+      );
       return res.json({ success: true, predictionId: prediction.id, webhookMode: true });
     }
 
