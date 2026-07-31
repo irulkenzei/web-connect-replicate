@@ -21,7 +21,10 @@
 //                         //     dipakai sebagai document ID job ini.
 //   "mode": "single" | "dialogue",
 //   "text": "...", "language": "en", "speed": 1.0, "temperature": 0.7,
-//   "output_format": "wav", "speaker_wav": "...", "speaker_map": {...}
+//   "output_format": "wav", "speaker_wav": "...", "speaker_map": {...},
+//   "exaggeration": 0.5, "cfg_weight": 0.5, "chunk_by_punctuation": true
+//   // 🆕 3 parameter terakhir KHUSUS Chatterbox (model lama XTTS-v2
+//   // gak punya ini) -- opsional, ada default kalau gak dikirim.
 // }
 // ============================================================
 
@@ -85,6 +88,13 @@ export default async ({ req, res, log, error }) => {
       music_volume_db = -10.0,
       comma_pause_ms = 300, // ⏸️ opsional -- durasi jeda setelah koma
       period_pause_ms = 600, // ⏸️ opsional -- durasi jeda setelah titik
+      // 🆕 Parameter KHUSUS Chatterbox (gak ada di XTTS-v2 lama) --
+      // default-nya sama persis yang dipakai model_predict.py di
+      // Replicate, jadi kalau client belum kirim apa-apa, hasilnya
+      // tetap konsisten.
+      exaggeration = 0.5, // 0.0-1.0, intensitas ekspresi/emosi suara
+      cfg_weight = 0.5, // 0.0-1.0, seberapa ketat model "nurut" ke voice reference
+      chunk_by_punctuation = true, // pecah teks di koma/titik biar gak drift di teks panjang
     } = payload;
 
     requestId = reqId;
@@ -119,6 +129,9 @@ export default async ({ req, res, log, error }) => {
         output_format,
         comma_pause_ms,
         period_pause_ms,
+        exaggeration,
+        cfg_weight,
+        chunk_by_punctuation,
       };
     } else {
       if (!text || !speaker_wav) {
@@ -133,6 +146,9 @@ export default async ({ req, res, log, error }) => {
         output_format,
         comma_pause_ms,
         period_pause_ms,
+        exaggeration,
+        cfg_weight,
+        chunk_by_punctuation,
       };
     }
 
