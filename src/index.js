@@ -180,9 +180,15 @@ export default async ({ req, res, log, error }) => {
     // akibatnya, pas replicate-webhook nanti nyoba UPDATE document itu
     // (status completed/failed), dia gagal dengan error "Document with
     // the requested ID could not be found", karena document-nya emang
-    // belum pernah dibikin sama sekali. Document awal (status
-    // "processing") WAJIB dibikin di sini dulu, biar ada yang bisa
-    // di-update sama webhook nanti.
+    // belum pernah dibikin sama sekali. Document awal WAJIB dibikin di
+    // sini dulu, biar ada yang bisa di-update sama webhook nanti.
+    //
+    // 🔧 FIX #2 (penting!): status di sini HARUS 'pending', BUKAN
+    // 'processing' -- polling loop di App.jsx cuma lanjut nunggu selama
+    // `jobDoc.status === 'pending'`; status apapun SELAIN 'pending'
+    // (termasuk 'processing') langsung dianggap "final" oleh loop itu,
+    // padahal audio_url-nya masih kosong -- ini yang bikin generate
+    // "berhenti sendiri" padahal proses di background masih lanjut.
     if (REPLICATE_WEBHOOK_URL) {
       log(`Prediction started (webhook mode): ${prediction.id}`);
       await databases.createDocument(
@@ -190,7 +196,7 @@ export default async ({ req, res, log, error }) => {
         JOBS_COLLECTION_ID,
         requestId,
         {
-          status: 'processing',
+          status: 'pending',
           audio_url: '',
           file_name: '',
           error_message: '',
