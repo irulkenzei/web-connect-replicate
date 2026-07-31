@@ -95,6 +95,9 @@ export default async ({ req, res, log, error }) => {
       exaggeration = 0.5, // 0.0-1.0, intensitas ekspresi/emosi suara
       cfg_weight = 0.5, // 0.0-1.0, seberapa ketat model "nurut" ke voice reference
       chunk_by_punctuation = true, // pecah teks di koma/titik biar gak drift di teks panjang
+      top_p = 1.0,
+      min_p = 0.05,
+      repetition_penalty = 1.2,
     } = payload;
 
     requestId = reqId;
@@ -132,6 +135,9 @@ export default async ({ req, res, log, error }) => {
         exaggeration,
         cfg_weight,
         chunk_by_punctuation,
+        top_p,
+        min_p,
+        repetition_penalty,
       };
     } else {
       if (!text || !speaker_wav) {
@@ -149,6 +155,9 @@ export default async ({ req, res, log, error }) => {
         exaggeration,
         cfg_weight,
         chunk_by_punctuation,
+        top_p,
+        min_p,
+        repetition_penalty,
       };
     }
 
