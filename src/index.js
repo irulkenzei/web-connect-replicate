@@ -31,6 +31,13 @@
 import Replicate from 'replicate';
 import { Client, Storage, Databases, ID } from 'node-appwrite';
 import { InputFile } from 'node-appwrite/file';
+import { reserveCredits, settleCredits, refundCredits } from './creditLedger.js';
+
+// 💳 Kredit: speech/dialogue/emotion = 15 kredit per generation (maks 500
+// char). Job doc `web_generation_jobs` BELUM ada saat function ini jalan
+// (function yang bikin), jadi userId diambil dari PAYLOAD (frontend kirim
+// `userId` + `creditFeature`). Selama env CREDIT_ENFORCE != 'true' ->
+// cuma dicatat (dry-run), saldo tidak dipotong.
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const MODEL_VERSION = process.env.REPLICATE_MODEL_VERSION;
@@ -75,6 +82,8 @@ export default async ({ req, res, log, error }) => {
 
     const {
       requestId: reqId,
+      userId, // 💳 dari frontend -- buat reservasi kredit
+      creditFeature, // 💳 'speech' | 'dialogue' | 'emotion' (opsional; fallback dari mode)
       mode = 'single',
       text,
       speaker_wav,
@@ -112,6 +121,50 @@ export default async ({ req, res, log, error }) => {
       .setKey(process.env.APPWRITE_API_KEY);
     databases = new Databases(client);
     const storage = new Storage(client);
+
+    // ---- 💳 RESERVASI KREDIT ----
+    const CREDIT_ENFORCE = process.env.CREDIT_ENFORCE === 'true';
+    const creditDbId = APPWRITE_DATABASE_ID || 'naratorai';
+    const feature = ['speech', 'dialogue', 'emotion'].includes(creditFeature)
+      ? creditFeature
+      : mode === 'dialogue' ? 'dialogue' : 'speech';
+    if (userId) {
+      try {
+        const reserve = await reserveCredits(databases, creditDbId, {
+          userId,
+          requestId,
+          feature,
+          input: { chars: (text || '').length },
+          enforce: CREDIT_ENFORCE,
+        });
+        if (!reserve.ok && reserve.reason === 'insufficient') {
+          await databases.createDocument(creditDbId, JOBS_COLLECTION_ID, requestId, {
+            status: 'failed', audio_url: '', file_name: '',
+            error_message: 'Not enough credits for this generation.',
+          }).catch(() => {});
+          return res.json({ success: false, error: 'insufficient_credits' }, 402);
+        }
+        if (!reserve.ok && reserve.reason === 'duplicate') {
+          return res.json({ success: false, error: 'duplicate_request' }, 409);
+        }
+        if (!reserve.ok) {
+          log(`[credit] reserve non-fatal (${reserve.reason}): ${reserve.message}`);
+          if (CREDIT_ENFORCE) {
+            return res.json({ success: false, error: 'credit_check_failed' }, 500);
+          }
+        } else {
+          log(`[credit] ${feature} reserve ${requestId}: ${JSON.stringify(reserve)}`);
+        }
+      } catch (creditErr) {
+        error(`[credit] reserve threw: ${creditErr.message}`);
+        if (CREDIT_ENFORCE) return res.json({ success: false, error: 'credit_system_error' }, 500);
+      }
+    } else if (CREDIT_ENFORCE) {
+      error('[credit] enforce aktif tapi userId tidak dikirim frontend.');
+      return res.json({ success: false, error: 'missing_credit_context' }, 400);
+    } else {
+      log('[credit] speech start tanpa userId -- credit di-skip (log-only).');
+    }
 
     let input;
 
@@ -282,11 +335,28 @@ export default async ({ req, res, log, error }) => {
       }
     );
 
+    // 💳 Jalur fallback (tanpa webhook) sukses -> kunci reservasi kredit.
+    try {
+      await settleCredits(databases, APPWRITE_DATABASE_ID || 'naratorai', requestId);
+    } catch (creditErr) {
+      error(`[credit] settle threw for ${requestId}: ${creditErr.message}`);
+    }
+
     return res.json({ success: true, audioUrl: permanentAudioUrl, fileName });
 
   } catch (err) {
     error('CRITICAL ERROR: ' + err.message);
     if (err.stack) error('Stack trace: ' + err.stack);
+
+    // 💳 Generate gagal -> kembalikan kredit (idempotent, no-op untuk row
+    // dry-run / free, dan kalau webhook mode sudah settle/refund duluan).
+    if (databases && requestId) {
+      try {
+        await refundCredits(databases, APPWRITE_DATABASE_ID || 'naratorai', requestId, 'generation_failed');
+      } catch (creditErr) {
+        error(`[credit] refund threw for ${requestId}: ${creditErr.message}`);
+      }
+    }
 
     // Tulis status gagal ke job document juga, supaya client yang lagi
     // polling nggak nunggu selamanya -- dia bakal lihat status "failed".
