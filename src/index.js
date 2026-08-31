@@ -305,4 +305,4 @@ export default async ({ req, res, log, error }) => {
 
     return res.json({ success: false, error: err.message }, 500);
   }
-};
+}; 
